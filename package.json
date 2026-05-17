@@ -1,0 +1,35 @@
+{
+  "name": "vibereview",
+  "version": "0.1.0",
+  "description": "Split a GitHub PR into AI-reviewable layers",
+  "type": "module",
+  "bin": { "vibereview": "./dist/cli.js" },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src tests"
+  },
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.40.0",
+    "@anthropic-ai/tokenizer": "^0.0.4",
+    "commander": "^12.0.0",
+    "execa": "^9.0.0",
+    "openai": "^4.80.0",
+    "parse-diff": "^0.11.1",
+    "picomatch": "^4.0.0",
+    "tiktoken": "^1.0.0",
+    "yaml": "^2.5.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/picomatch": "^3.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.0.0"
+  }
+}
