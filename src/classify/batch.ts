@@ -74,10 +74,24 @@ export async function classifyAll(args: ClassifyAllArgs): Promise<ClassifyRespon
       }
     }
     all.push(...result.classifications)
-    args.onProgress?.(`  batch ${i + 1}/${batches.length} classified (${batch.length} hunks)`)
+    args.onProgress?.(
+      `  batch ${i + 1}/${batches.length} classified (${batch.length} hunks, ${formatBatchUsage(result.usage)})`,
+    )
   }
 
   return { classifications: all, usage }
+}
+
+function formatBatchUsage(u: Usage): string {
+  const parts = [`${formatTokens(u.inputTokens)} in / ${formatTokens(u.outputTokens)} out`]
+  if (u.cacheReadTokens && u.cacheReadTokens > 0) parts.push(`cache hit ${formatTokens(u.cacheReadTokens)}`)
+  if (u.cacheWriteTokens && u.cacheWriteTokens > 0) parts.push(`cache write ${formatTokens(u.cacheWriteTokens)}`)
+  return parts.join(", ")
+}
+
+function formatTokens(n: number): string {
+  if (n < 1000) return String(n)
+  return `${(n / 1000).toFixed(1)}k`
 }
 
 function findMissing(batch: Hunk[], classifications: Classification[]): string[] {

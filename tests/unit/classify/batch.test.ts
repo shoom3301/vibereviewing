@@ -102,13 +102,37 @@ describe("classifyAll", () => {
       maxPerBatch: 3, maxTokensPerBatch: 1e9,
       onProgress: (m) => messages.push(m),
     })
-    // 7 hunks at maxPerBatch=3 => 3 batches
+    // 7 hunks at maxPerBatch=3 => 3 batches. Fake classifier returns 1 in / 1 out per call.
     expect(messages).toEqual([
       "classifying 7 hunks in 3 batches",
-      "  batch 1/3 classified (3 hunks)",
-      "  batch 2/3 classified (3 hunks)",
-      "  batch 3/3 classified (1 hunks)",
+      "  batch 1/3 classified (3 hunks, 1 in / 1 out)",
+      "  batch 2/3 classified (3 hunks, 1 in / 1 out)",
+      "  batch 3/3 classified (1 hunks, 1 in / 1 out)",
     ])
+  })
+
+  it("includes cache stats and uses k-suffix for large counts", async () => {
+    const hunks = [fakeHunk("h_0")]
+    const c: Classifier = {
+      provider: "claude", model: "test", estimateTokens: () => 1,
+      classify: vi.fn(async ({ hunks: input }) => ({
+        classifications: input.map((h) => ({
+          hunk_id: h.id, layer: "A" as const, confidence: 0.9,
+          intents: ["typo" as const], rationale: "",
+        })),
+        usage: {
+          inputTokens: 1234, outputTokens: 567,
+          cacheReadTokens: 800, cacheWriteTokens: 0,
+        },
+      })),
+    }
+    const messages: string[] = []
+    await classifyAll({
+      hunks, classifier: c, systemPrompt: "sys",
+      maxPerBatch: 10, maxTokensPerBatch: 1e9,
+      onProgress: (m) => messages.push(m),
+    })
+    expect(messages).toContain("  batch 1/1 classified (1 hunks, 1.2k in / 567 out, cache hit 800)")
   })
 
   it("does nothing when onProgress is omitted", async () => {
