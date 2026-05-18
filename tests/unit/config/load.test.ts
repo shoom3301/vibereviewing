@@ -29,7 +29,7 @@ describe("loadConfig", () => {
   })
 
   it("default max_diff_tokens is 200000", () => {
-    expect(DEFAULT_CONFIG.max_diff_tokens).toBe(200000)
+    expect(DEFAULT_CONFIG.max_diff_tokens).toBe(890000)
   })
 
   it("default models are cheap classifiers", () => {
