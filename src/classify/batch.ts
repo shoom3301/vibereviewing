@@ -1,4 +1,5 @@
 import type { Classifier, ClassifyRequest, ClassifyResponse, Usage } from "./classifier.js"
+import type { BatchCache } from "./cache.js"
 import type { Hunk } from "../hunkify/types.js"
 import type { Classification } from "../promote/types.js"
 
@@ -38,6 +39,7 @@ export type ClassifyAllArgs = {
   onProgress?: (msg: string) => void
   maxAttemptsPerBatch?: number
   retryBackoffMs?: (attempt: number) => number
+  cache?: BatchCache
 }
 
 const DEFAULT_MAX_ATTEMPTS = 3
@@ -63,35 +65,78 @@ export async function classifyAll(args: ClassifyAllArgs): Promise<ClassifyRespon
 
   for (let i = 0; i < batches.length; i++) {
     const batch = batches[i]!
-    let result = await attemptClassify(args.classifier, {
+    const batchHunkIds = batch.map((h) => h.id)
+
+    const cached = args.cache?.lookup(batchHunkIds)
+    if (cached) {
+      accUsage(usage, cached.usage)
+      all.push(...cached.classifications)
+      args.onProgress?.(`  batch ${i + 1}/${batches.length} cached (${batch.length} hunks)`)
+      continue
+    }
+
+    const firstAttempt = await attemptClassify(args.classifier, {
       systemPrompt: args.systemPrompt, hunks: batch,
     }, { batchIndex: i, totalBatches: batches.length, maxAttempts, backoff, onProgress: args.onProgress })
-    accUsage(usage, result.usage)
+    accUsage(usage, firstAttempt.usage)
+    const classifications: Classification[] = [...firstAttempt.classifications]
+    let batchUsage: Usage = { ...firstAttempt.usage }
 
-    let missing = findMissing(batch, result.classifications)
-    if (missing.length > 0) {
+    // Focused retries: re-prompt with ONLY the missing hunks. This is much more
+    // reliable than re-sending the full batch — the model focuses on a small,
+    // explicit subset rather than rescanning everything.
+    let missing = findMissing(batch, classifications)
+    for (let r = 1; r <= FOCUSED_RETRY_ATTEMPTS && missing.length > 0; r++) {
+      args.onProgress?.(
+        `  batch ${i + 1}/${batches.length} missing ${missing.length} hunks — retrying focused (attempt ${r}/${FOCUSED_RETRY_ATTEMPTS})`,
+      )
+      const missingSet = new Set(missing)
+      const missingHunks = batch.filter((h) => missingSet.has(h.id))
       const retry = await attemptClassify(args.classifier, {
-        systemPrompt: args.systemPrompt + "\n\nRETRY: missing ids — " + missing.join(","),
-        hunks: batch,
+        systemPrompt: args.systemPrompt, hunks: missingHunks,
       }, { batchIndex: i, totalBatches: batches.length, maxAttempts, backoff, onProgress: args.onProgress })
       accUsage(usage, retry.usage)
-      const retryForMissing = retry.classifications.filter((c) => missing.includes(c.hunk_id))
-      result = {
-        classifications: [...result.classifications, ...retryForMissing],
-        usage: retry.usage,
+      batchUsage = accUsageReturn(batchUsage, retry.usage)
+      for (const c of retry.classifications) {
+        if (missingSet.has(c.hunk_id)) classifications.push(c)
       }
-      missing = findMissing(batch, result.classifications)
-      if (missing.length > 0) {
-        throw new Error(`Classifier missing hunk ids after retry: ${missing.join(",")}`)
+      missing = findMissing(batch, classifications)
+    }
+
+    // Fallback: if the model still won't classify some hunks, force them to
+    // layer C (human review). Safer than failing the whole run.
+    if (missing.length > 0) {
+      args.onProgress?.(
+        `  batch ${i + 1}/${batches.length} warning: forcing ${missing.length} unclassified hunks to layer C`,
+      )
+      for (const id of missing) {
+        classifications.push({
+          hunk_id: id, layer: "C", confidence: 0,
+          intents: ["unknown"],
+          rationale: "fallback: model omitted this hunk after retries; escalated to C for human review",
+        })
       }
     }
-    all.push(...result.classifications)
+
+    all.push(...classifications)
+    args.cache?.record(batchHunkIds, { classifications, usage: batchUsage })
     args.onProgress?.(
-      `  batch ${i + 1}/${batches.length} classified (${batch.length} hunks, ${formatBatchUsage(result.usage)})`,
+      `  batch ${i + 1}/${batches.length} classified (${batch.length} hunks, ${formatBatchUsage(batchUsage)})`,
     )
   }
 
   return { classifications: all, usage }
+}
+
+const FOCUSED_RETRY_ATTEMPTS = 2
+
+function accUsageReturn(a: Usage, b: Usage): Usage {
+  return {
+    inputTokens: a.inputTokens + b.inputTokens,
+    outputTokens: a.outputTokens + b.outputTokens,
+    cacheReadTokens: (a.cacheReadTokens ?? 0) + (b.cacheReadTokens ?? 0),
+    cacheWriteTokens: (a.cacheWriteTokens ?? 0) + (b.cacheWriteTokens ?? 0),
+  }
 }
 
 type AttemptContext = {

@@ -23,5 +23,6 @@ describe("buildCli", () => {
     expect(flags).toContain("--branch-name")
     expect(flags).toContain("--verbose")
     expect(flags).toContain("--json")
+    expect(flags).toContain("--no-cache")
   })
 })

@@ -2,6 +2,7 @@ import { join } from "node:path"
 import { writeFileSync, mkdirSync } from "node:fs"
 import { execa } from "execa"
 import type { Classifier } from "../classify/classifier.js"
+import type { BatchCache } from "../classify/cache.js"
 import type { Config } from "../config/schema.js"
 import type { PRRef, Layer } from "../types.js"
 import type { FileChange } from "../hunkify/types.js"
@@ -33,6 +34,7 @@ export type SplitInput = {
   postComment: (body: string) => Promise<void>
   now?: Date
   onProgress?: (msg: string) => void
+  cache?: BatchCache
 }
 
 export type SplitResult = {
@@ -62,6 +64,7 @@ export async function runSplit(input: SplitInput): Promise<SplitResult> {
     hunks: allHunks, classifier: input.classifier, systemPrompt,
     maxPerBatch: 30, maxTokensPerBatch: 30_000,
     onProgress: log,
+    cache: input.cache,
   })
 
   const promoted = promote({

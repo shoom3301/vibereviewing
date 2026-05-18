@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest"
 import { classifyAll, batchHunks } from "../../../src/classify/batch.js"
+import type { BatchCache, CachedBatchResult } from "../../../src/classify/cache.js"
 import type { Classifier } from "../../../src/classify/classifier.js"
 import type { Hunk } from "../../../src/hunkify/types.js"
 
@@ -58,14 +59,16 @@ describe("classifyAll", () => {
     expect(c.classify).toHaveBeenCalledTimes(2)
   })
 
-  it("retries once when a batch is missing hunk ids", async () => {
+  it("re-prompts with only the missing hunks", async () => {
     const hunks = Array.from({ length: 3 }, (_, i) => fakeHunk(`h_${i}`))
     let call = 0
+    const seenHunkIds: string[][] = []
     const c: Classifier = {
       provider: "claude", model: "test", estimateTokens: () => 1,
       classify: vi.fn(async ({ hunks: input }) => {
         call++
         const ids = input.map((h) => h.id)
+        seenHunkIds.push(ids)
         const returned = call === 1 ? ids.slice(0, 1) : ids
         return {
           classifications: returned.map((id) => ({
@@ -81,16 +84,36 @@ describe("classifyAll", () => {
       maxPerBatch: 10, maxTokensPerBatch: 1e9,
     })
     expect(out.classifications).toHaveLength(3)
-    expect(c.classify).toHaveBeenCalledTimes(2)
+    expect(seenHunkIds[0]).toEqual(["h_0", "h_1", "h_2"])
+    // Focused retry should ask for ONLY the 2 missing ones, not all 3
+    expect(seenHunkIds[1]).toEqual(["h_1", "h_2"])
   })
 
-  it("throws when retry also misses hunk ids", async () => {
+  it("forces unclassified hunks to layer C after focused retries exhaust", async () => {
     const hunks = [fakeHunk("h_0"), fakeHunk("h_1")]
-    const c = classifierThatReturns((ids) => [ids[0]!])
-    await expect(classifyAll({
+    // Classifier always returns only h_0, never h_1 — even when asked for only h_1.
+    const c: Classifier = {
+      provider: "claude", model: "test", estimateTokens: () => 1,
+      classify: vi.fn(async () => ({
+        classifications: [{
+          hunk_id: "h_0", layer: "A" as const, confidence: 0.9,
+          intents: ["typo" as const], rationale: "",
+        }],
+        usage: { inputTokens: 1, outputTokens: 1 },
+      })),
+    }
+    const messages: string[] = []
+    const out = await classifyAll({
       hunks, classifier: c, systemPrompt: "sys",
       maxPerBatch: 10, maxTokensPerBatch: 1e9,
-    })).rejects.toThrow(/missing/i)
+      onProgress: (m) => messages.push(m),
+    })
+    expect(out.classifications).toHaveLength(2)
+    const h1 = out.classifications.find((c) => c.hunk_id === "h_1")!
+    expect(h1.layer).toBe("C")
+    expect(h1.confidence).toBe(0)
+    expect(h1.intents).toEqual(["unknown"])
+    expect(messages.some((m) => /forcing 1 unclassified hunks to layer C/.test(m))).toBe(true)
   })
 
   it("invokes onProgress with batch start and completion", async () => {
@@ -263,6 +286,36 @@ describe("classifyAll", () => {
     })
     expect(out.classifications).toHaveLength(1)
     expect(calls).toBe(2)
+  })
+
+  it("skips classifier calls for cached batches and emits a cached progress line", async () => {
+    const hunks = Array.from({ length: 6 }, (_, i) => fakeHunk(`h_${i}`))
+    const classifier = classifierThatReturns((ids) => ids)
+    // Two batches of 3. Pre-cache the first batch's result.
+    const cacheStore = new Map<string, CachedBatchResult>()
+    const cache: BatchCache = {
+      lookup: (ids) => cacheStore.get([...ids].sort().join(",")),
+      record: (ids, r) => { cacheStore.set([...ids].sort().join(","), r) },
+    }
+    cache.record(["h_0", "h_1", "h_2"], {
+      classifications: ["h_0", "h_1", "h_2"].map((id) => ({
+        hunk_id: id, layer: "A" as const, confidence: 0.9,
+        intents: ["typo" as const], rationale: "cached",
+      })),
+      usage: { inputTokens: 0, outputTokens: 0 },
+    })
+    const messages: string[] = []
+    const out = await classifyAll({
+      hunks, classifier, systemPrompt: "sys",
+      maxPerBatch: 3, maxTokensPerBatch: 1e9,
+      cache, onProgress: (m) => messages.push(m),
+    })
+    expect(out.classifications).toHaveLength(6)
+    // First batch was cached → classifier called once (for batch 2 only)
+    expect(classifier.classify).toHaveBeenCalledTimes(1)
+    expect(messages).toContain("  batch 1/2 cached (3 hunks)")
+    // The second batch should be recorded into the cache.
+    expect(cacheStore.size).toBe(2)
   })
 
   it("throws enriched error with batch context after exhausting retries", async () => {

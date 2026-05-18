@@ -2,10 +2,12 @@
 import { Command } from "commander"
 import { execa } from "execa"
 import { existsSync } from "node:fs"
+import { homedir } from "node:os"
 import { join } from "node:path"
 import { version } from "./index.js"
 import { loadConfig } from "./config/load.js"
 import { makeClassifier, detectFromEnv } from "./classify/select.js"
+import { FileBatchCache } from "./classify/cache.js"
 import { parsePrUrl, fetchPR } from "./github/fetch.js"
 import { withWorktree } from "./apply/worktree.js"
 import { runSplit } from "./commands/split.js"
@@ -33,6 +35,7 @@ export function buildCli(): Command {
     .option("--no-pr", "push branch but do not open PR")
     .option("--base-branch <name>", "override base branch")
     .option("--branch-name <pattern>", "override branch name pattern")
+    .option("--no-cache", "disable per-batch classification cache")
     .action(async (prArg: string, opts: Record<string, unknown>) => {
       await doSplit(prArg, opts)
     })
@@ -73,6 +76,19 @@ async function doSplit(prArg: string, opts: Record<string, unknown>) {
     process.stdout.write(JSON.stringify(m, null, 2) + "\n")
     return
   }
+
+  let cache: FileBatchCache | undefined
+  if (opts.cache !== false) {
+    const modelId = classifier.model.replace(/[^a-zA-Z0-9._-]/g, "_")
+    const cachePath = join(
+      cacheBaseDir(),
+      "vibereview",
+      `${pr.owner}__${pr.repo}__${pr.number}__${pr.headSha}__${classifier.provider}__${modelId}.json`,
+    )
+    cache = new FileBatchCache(cachePath)
+    log(`cache: ${cachePath}`)
+  }
+
   await withWorktree(repoPath, pr.baseSha, async (wt) => {
     const result = await runSplit({
       pr, diff, config, classifier,
@@ -89,10 +105,17 @@ async function doSplit(prArg: string, opts: Record<string, unknown>) {
         await postOrUpdateComment({ sourcePR: pr, body }, repoPath)
       },
       onProgress: log,
+      cache,
     })
     if (opts.json) process.stdout.write(JSON.stringify(result, null, 2) + "\n")
     else console.log(`vibereview: opened ${result.companionUrl}\nLayers: A=${result.perLayer.A} B=${result.perLayer.B} C=${result.perLayer.C}`)
   })
+}
+
+function cacheBaseDir(): string {
+  if (process.env.XDG_CACHE_HOME) return process.env.XDG_CACHE_HOME
+  if (process.platform === "darwin") return join(homedir(), "Library", "Caches")
+  return join(homedir(), ".cache")
 }
 
 async function doManifest(prArg: string, opts: Record<string, unknown>) {
