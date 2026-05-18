@@ -25,23 +25,22 @@ export type FetchPRFromCommandsArgs = {
 
 export async function fetchPRFromCommands(a: FetchPRFromCommandsArgs): Promise<FetchPRResult> {
   const json = await a.runGh([
-    "pr", "view", String(a.ref.number),
-    "--repo", `${a.ref.owner}/${a.ref.repo}`,
-    "--json", "number,title,headRefOid,baseRefName,baseRefOid,url",
+    "api", `repos/${a.ref.owner}/${a.ref.repo}/pulls/${a.ref.number}`,
   ])
   const parsed = JSON.parse(json) as {
-    number: number; title: string; headRefOid: string;
-    baseRefName: string; baseRefOid: string; url: string
+    number: number; title: string; html_url: string;
+    base: { ref: string; sha: string };
+    head: { ref: string; sha: string };
   }
-  const diff = await a.runGitDiff(parsed.baseRefOid, parsed.headRefOid)
+  const diff = await a.runGitDiff(parsed.base.sha, parsed.head.sha)
   return {
     pr: {
       owner: a.ref.owner, repo: a.ref.repo,
       number: parsed.number, title: parsed.title,
-      baseBranch: parsed.baseRefName,
-      baseSha: parsed.baseRefOid,
-      headSha: parsed.headRefOid,
-      url: parsed.url,
+      baseBranch: parsed.base.ref,
+      baseSha: parsed.base.sha,
+      headSha: parsed.head.sha,
+      url: parsed.html_url,
     },
     diff,
   }

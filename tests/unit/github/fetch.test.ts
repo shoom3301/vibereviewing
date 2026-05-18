@@ -22,10 +22,9 @@ describe("fetchPRFromCommands", () => {
     const ghJson = JSON.stringify({
       number: 1234,
       title: "Test PR",
-      headRefOid: "def456",
-      baseRefName: "main",
-      baseRefOid: "abc123",
-      url: "https://github.com/cowprotocol/cowswap/pull/1234",
+      html_url: "https://github.com/cowprotocol/cowswap/pull/1234",
+      base: { ref: "main", sha: "abc123" },
+      head: { ref: "feature", sha: "def456" },
     })
     const runGh = vi.fn().mockResolvedValue(ghJson)
     const runGitDiff = vi.fn().mockResolvedValue("diff --git a/x b/x\n")

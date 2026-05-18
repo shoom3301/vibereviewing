@@ -6,6 +6,31 @@ import type { Classification } from "../promote/types.js"
 
 export type OpenAIClassifierOpts = { apiKey: string; model: string }
 
+function supportsTemperature(model: string): boolean {
+  return !/^(o[134]|gpt-5)/.test(model)
+}
+
+const STRICT_UNSUPPORTED_KEYS = new Set([
+  "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf",
+  "minLength", "maxLength", "pattern", "format",
+  "minItems", "maxItems", "uniqueItems",
+  "minProperties", "maxProperties",
+])
+
+export function toOpenAIStrictSchema(input: unknown): unknown {
+  if (Array.isArray(input)) return input.map(toOpenAIStrictSchema)
+  if (input === null || typeof input !== "object") return input
+  const out: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(input as Record<string, unknown>)) {
+    if (STRICT_UNSUPPORTED_KEYS.has(k)) continue
+    out[k] = toOpenAIStrictSchema(v)
+  }
+  if (out.type === "object" && out.properties && out.additionalProperties === undefined) {
+    out.additionalProperties = false
+  }
+  return out
+}
+
 type RawCompletion = {
   choices: Array<{ message: { content: string | null } }>
   usage?: { prompt_tokens?: number; completion_tokens?: number }
@@ -34,12 +59,12 @@ export class OpenAIClassifier implements Classifier {
   async classify(req: ClassifyRequest): Promise<ClassifyResponse> {
     const res = await this.client.chat.completions.create({
       model: this.model,
-      temperature: 0,
+      ...(supportsTemperature(this.model) ? { temperature: 0 } : {}),
       response_format: {
         type: "json_schema",
         json_schema: {
           name: "submit_classifications",
-          schema: CLASSIFICATIONS_JSON_SCHEMA.input_schema as Record<string, unknown>,
+          schema: toOpenAIStrictSchema(CLASSIFICATIONS_JSON_SCHEMA.input_schema) as Record<string, unknown>,
           strict: true,
         },
       },

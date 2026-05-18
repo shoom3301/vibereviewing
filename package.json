@@ -2,6 +2,8 @@
   "name": "vibereview",
   "version": "0.1.0",
   "description": "Split a GitHub PR into AI-reviewable layers",
+  "license": "MIT",
+  "author": "shoom3301 <shoom3301@gmail.com>",
   "type": "module",
   "bin": {
     "vibereview": "./dist/cli.js"
