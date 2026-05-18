@@ -1,0 +1,12 @@
+diff --git a/src/Empty.tsx b/src/Empty.tsx
+new file mode 100644
+--- /dev/null
++++ b/src/Empty.tsx
+@@ -0,0 +1,7 @@
++import React from "react"
++
++export function Empty({ message }: { message: string }) {
++  return (
++    <div className="empty-state">{message}</div>
++  )
++}

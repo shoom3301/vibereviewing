@@ -1,0 +1,15 @@
+diff --git a/config/routes.yaml b/config/routes.yaml
+--- a/config/routes.yaml
++++ b/config/routes.yaml
+@@ -1,2 +1,2 @@
+ routes:
+-  - path: "/api/v1/orders"
++  - path: "/api/v2/orders"
+diff --git a/src/client.ts b/src/client.ts
+--- a/src/client.ts
++++ b/src/client.ts
+@@ -1,3 +1,3 @@
+ export async function fetchOrders() {
+-  return fetch("/api/v1/orders")
++  return fetch("/api/v2/orders")
+ }

@@ -1,0 +1,11 @@
+diff --git a/package.json b/package.json
+--- a/package.json
++++ b/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "my-app",
+   "dependencies": {
+-    "react": "17.0.2"
++    "react": "18.0.0"
+   }
+ }

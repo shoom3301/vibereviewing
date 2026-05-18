@@ -1,0 +1,3 @@
+[
+  { "layer": "A", "intents": ["format", "business_logic"], "confidence": 0.9 }
+]

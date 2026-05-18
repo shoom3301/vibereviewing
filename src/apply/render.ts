@@ -11,9 +11,11 @@ export function renderLayerPatch(files: FileChange[], selectedHunkIds: Set<strin
 }
 
 function renderFile(f: FileChange, hunks: Hunk[]): string[] {
+  const isNewFile = f.oldPath === null && !f.isDelete
   const oldPath = f.oldPath ?? f.file
   const newPath = f.file
   const lines: string[] = [`diff --git a/${oldPath} b/${newPath}`]
+  if (isNewFile) lines.push("new file mode 100644")
   if (f.isRename) {
     lines.push("similarity index 90%")
     lines.push(`rename from ${oldPath}`)
@@ -21,7 +23,7 @@ function renderFile(f: FileChange, hunks: Hunk[]): string[] {
   }
   if (f.isDelete) lines.push("deleted file mode 100644")
   if (!f.isBinary && !f.isSubmodule) {
-    lines.push(`--- a/${oldPath}`)
+    lines.push(isNewFile ? "--- /dev/null" : `--- a/${oldPath}`)
     lines.push(`+++ b/${newPath}`)
   }
   const sorted = [...hunks].sort((a, b) => a.oldStart - b.oldStart)

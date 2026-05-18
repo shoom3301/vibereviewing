@@ -1,0 +1,12 @@
+diff --git a/tests/__snapshots__/Button.test.tsx.snap b/tests/__snapshots__/Button.test.tsx.snap
+--- a/tests/__snapshots__/Button.test.tsx.snap
++++ b/tests/__snapshots__/Button.test.tsx.snap
+@@ -1,7 +1,7 @@
+ exports[`Button renders correctly 1`] = `
+ <button
+   className="btn"
+-  disabled={false}
++  disabled={true}
+ >
+   Click me
+ </button>

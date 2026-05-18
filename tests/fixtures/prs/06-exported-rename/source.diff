@@ -1,0 +1,16 @@
+diff --git a/src/api.ts b/src/api.ts
+--- a/src/api.ts
++++ b/src/api.ts
+@@ -1,3 +1,3 @@
+-export function getOrder(id: string) {
++export function fetchOrder(id: string) {
+   return id
+ }
+diff --git a/src/page.ts b/src/page.ts
+--- a/src/page.ts
++++ b/src/page.ts
+@@ -1,3 +1,3 @@
+ async function main() {
+-  return getOrder("x")
++  return fetchOrder("x")
+ }

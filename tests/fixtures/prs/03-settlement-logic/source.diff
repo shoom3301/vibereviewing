@@ -1,0 +1,10 @@
+diff --git a/src/settlement/engine.ts b/src/settlement/engine.ts
+--- a/src/settlement/engine.ts
++++ b/src/settlement/engine.ts
+@@ -1,4 +1,4 @@
+ export function settle(amount: number, fee: number): number {
+-  // TODO: handle negative amounts
+-  return amount - fee
++  if (amount < 0) throw new Error("amount must be non-negative")
++  return Math.max(0, amount - fee)
+ }
