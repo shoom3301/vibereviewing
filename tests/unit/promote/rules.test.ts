@@ -168,3 +168,31 @@ describe("generatedFileRule", () => {
     expect(r.get("h_gen")!.layer).toBe("A")
   })
 })
+
+describe("domainFloorRule", () => {
+  it("forces ≥ C when floor is C", () => {
+    const h = makeHunk("src/settlement/engine.ts", "@@", "h_s", { floor: "C" })
+    const ctx = makeContext([makeFile("src/settlement/engine.ts", [h])],
+      [makeClassification({ hunk_id: "h_s", layer: "A" })])
+    const r = seedResult(ctx); domainFloorRule(ctx, r)
+    expect(r.get("h_s")!.layer).toBe("C")
+    expect(r.get("h_s")!.escalations).toContain("domain_floor")
+  })
+
+  it("forces ≥ B when floor is B and layer is A", () => {
+    const h = makeHunk("tsconfig.json", "@@", "h_t", { floor: "B" })
+    const ctx = makeContext([makeFile("tsconfig.json", [h])],
+      [makeClassification({ hunk_id: "h_t", layer: "A", intents: ["config_trivial"] })])
+    const r = seedResult(ctx); domainFloorRule(ctx, r)
+    expect(r.get("h_t")!.layer).toBe("B")
+  })
+
+  it("never demotes", () => {
+    const h = makeHunk("tsconfig.json", "@@", "h_t", { floor: "B" })
+    const ctx = makeContext([makeFile("tsconfig.json", [h])],
+      [makeClassification({ hunk_id: "h_t", layer: "C", intents: ["config_runtime"] })])
+    const r = seedResult(ctx); domainFloorRule(ctx, r)
+    expect(r.get("h_t")!.layer).toBe("C")
+    expect(r.get("h_t")!.escalations).not.toContain("domain_floor")
+  })
+})

@@ -189,4 +189,11 @@ function hasPairedSource(
   return false
 }
 
-export const domainFloorRule: Rule = () => {}
+export const domainFloorRule: Rule = (ctx, current) => {
+  for (const h of ctx.hunks) {
+    const c = current.get(h.id)!
+    const before = c.layer
+    c.layer = maxLayer(c.layer, h.context.domainFloor)
+    if (c.layer !== before) c.escalations.push("domain_floor")
+  }
+}
