@@ -18,6 +18,7 @@ export async function createCompanionPRFromCommands(a: CreatePRArgs): Promise<st
     "--head", a.branch,
     "--title", a.title,
     "--body", a.body,
+    "--draft",
   ])
   return out.trim()
 }

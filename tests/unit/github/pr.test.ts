@@ -20,6 +20,7 @@ describe("createCompanionPRFromCommands", () => {
       "pr", "create", "--repo", "x/y",
       "--base", "main", "--head", "vibereview/pr-1234-abc",
       "--title", "[vibereview] PR #1234 — layered review (do not merge)",
+      "--draft",
     ]))
   })
 })
