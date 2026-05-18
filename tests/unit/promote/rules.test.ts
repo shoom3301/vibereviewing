@@ -112,3 +112,34 @@ describe("dependencyRule", () => {
     expect(r.get("h_pkg")!.layer).toBe("A")
   })
 })
+
+describe("exportedSymbolRule", () => {
+  it("escalates definition and caller hunks together to B on exported rename", () => {
+    const def = makeHunk("src/api.ts",
+      `@@\n-export function getOrder(id: string) {\n+export function fetchOrder(id: string) {`,
+      "h_def")
+    const caller = makeHunk("src/page.ts",
+      `@@\n-  const o = await getOrder(id)\n+  const o = await fetchOrder(id)`,
+      "h_caller")
+    const ctx = makeContext(
+      [makeFile("src/api.ts", [def]), makeFile("src/page.ts", [caller])],
+      [
+        makeClassification({ hunk_id: "h_def", layer: "A", intents: ["rename_internal"] }),
+        makeClassification({ hunk_id: "h_caller", layer: "A", intents: ["rename_internal"] }),
+      ],
+    )
+    const r = seedResult(ctx); exportedSymbolRule(ctx, r)
+    expect(r.get("h_def")!.layer).toBe("B")
+    expect(r.get("h_caller")!.layer).toBe("B")
+    expect(r.get("h_def")!.escalations).toContain("exported_symbol")
+  })
+
+  it("does not escalate when the rename is not exported", () => {
+    const def = makeHunk("src/api.ts",
+      `@@\n-function helper() {\n+function utility() {`, "h_def")
+    const ctx = makeContext([makeFile("src/api.ts", [def])],
+      [makeClassification({ hunk_id: "h_def", layer: "A", intents: ["rename_internal"] })])
+    const r = seedResult(ctx); exportedSymbolRule(ctx, r)
+    expect(r.get("h_def")!.layer).toBe("A")
+  })
+})

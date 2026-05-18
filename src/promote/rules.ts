@@ -1,4 +1,4 @@
-import type { Rule } from "./types.js"
+import type { Rule, PromoteContext } from "./types.js"
 import { escalateOne, maxLayer } from "./layers.js"
 
 export const multiIntentRule: Rule = (ctx, current) => {
@@ -102,6 +102,52 @@ function looksLikeMajorBump(body: string): boolean {
     v.from !== undefined && v.to !== undefined && v.from !== v.to)
 }
 
-export const exportedSymbolRule: Rule = () => {}
+const EXPORTED_DECL_RE =
+  /export\s+(?:default\s+)?(?:async\s+)?(?:function|class|const|let|var|interface|type)\s+([A-Za-z_$][\w$]*)/
+
+export const exportedSymbolRule: Rule = (ctx, current) => {
+  const renamed = collectExportedRenames(ctx)
+  if (renamed.size === 0) return
+
+  for (const h of ctx.hunks) {
+    if (![...renamed].some((sym) => hunkMentions(h.body, sym))) continue
+    const c = current.get(h.id)!
+    const before = c.layer
+    c.layer = maxLayer(c.layer, "B")
+    if (c.layer !== before) c.escalations.push("exported_symbol")
+  }
+}
+
+function collectExportedRenames(ctx: PromoteContext): Set<string> {
+  const out = new Set<string>()
+  for (const h of ctx.hunks) {
+    const removed = new Set<string>()
+    const added = new Set<string>()
+    for (const line of h.body.split("\n")) {
+      const code = line.replace(/^[+\- ]/, "")
+      const m = code.match(EXPORTED_DECL_RE)
+      if (!m) continue
+      if (line.startsWith("-")) removed.add(m[1]!)
+      else if (line.startsWith("+")) added.add(m[1]!)
+    }
+    for (const r of removed) {
+      if (added.has(r)) continue
+      for (const a of added) {
+        if (!removed.has(a)) { out.add(r); out.add(a) }
+      }
+    }
+  }
+  return out
+}
+
+function hunkMentions(body: string, symbol: string): boolean {
+  const re = new RegExp(`\\b${symbol.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`)
+  for (const line of body.split("\n")) {
+    if (!line.startsWith("+") && !line.startsWith("-")) continue
+    if (re.test(line)) return true
+  }
+  return false
+}
+
 export const generatedFileRule: Rule = () => {}
 export const domainFloorRule: Rule = () => {}
