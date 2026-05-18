@@ -1,0 +1,14 @@
+{
+  "id": "chatcmpl_test",
+  "object": "chat.completion",
+  "model": "gpt-5",
+  "choices": [{
+    "index": 0,
+    "finish_reason": "stop",
+    "message": {
+      "role": "assistant",
+      "content": "{\"classifications\":[{\"hunk_id\":\"h_test_1\",\"layer\":\"A\",\"confidence\":0.95,\"intents\":[\"typo\"],\"rationale\":\"Fixes a typo.\"}]}"
+    }
+  }],
+  "usage": { "prompt_tokens": 1234, "completion_tokens": 56 }
+}
