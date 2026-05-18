@@ -1,0 +1,3 @@
+version: 1
+floors:
+  C: "not-an-array"

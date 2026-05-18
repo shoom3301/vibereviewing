@@ -1,0 +1,16 @@
+version: 1
+floors:
+  C:
+    - "**/settlement/**"
+    - "**/*.sol"
+  B:
+    - "tsconfig*.json"
+generated:
+  - "**/*.generated.ts"
+confidence_threshold: 0.65
+max_diff_tokens: 100000
+providers:
+  claude:
+    model: claude-opus-4-7
+  openai:
+    model: gpt-5
