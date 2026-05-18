@@ -5,6 +5,10 @@
   "license": "MIT",
   "author": "shoom3301 <shoom3301@gmail.com>",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/shoom3301/vibereviewing.git"
+  },
   "bin": {
     "vibereviewing": "./dist/cli.js"
   },
