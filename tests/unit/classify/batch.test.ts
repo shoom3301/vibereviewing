@@ -92,4 +92,31 @@ describe("classifyAll", () => {
       maxPerBatch: 10, maxTokensPerBatch: 1e9,
     })).rejects.toThrow(/missing/i)
   })
+
+  it("invokes onProgress with batch start and completion", async () => {
+    const hunks = Array.from({ length: 7 }, (_, i) => fakeHunk(`h_${i}`))
+    const c = classifierThatReturns((ids) => ids)
+    const messages: string[] = []
+    await classifyAll({
+      hunks, classifier: c, systemPrompt: "sys",
+      maxPerBatch: 3, maxTokensPerBatch: 1e9,
+      onProgress: (m) => messages.push(m),
+    })
+    // 7 hunks at maxPerBatch=3 => 3 batches
+    expect(messages).toEqual([
+      "classifying 7 hunks in 3 batches",
+      "  batch 1/3 classified (3 hunks)",
+      "  batch 2/3 classified (3 hunks)",
+      "  batch 3/3 classified (1 hunks)",
+    ])
+  })
+
+  it("does nothing when onProgress is omitted", async () => {
+    const hunks = [fakeHunk("h_0")]
+    const c = classifierThatReturns((ids) => ids)
+    await expect(classifyAll({
+      hunks, classifier: c, systemPrompt: "sys",
+      maxPerBatch: 10, maxTokensPerBatch: 1e9,
+    })).resolves.toBeDefined()
+  })
 })

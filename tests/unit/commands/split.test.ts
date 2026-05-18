@@ -70,6 +70,35 @@ describe("runSplit", () => {
     expect(result.perLayer.A + result.perLayer.B + result.perLayer.C).toBeGreaterThan(0)
   })
 
+  it("emits progress lines for each phase", async () => {
+    const diff = String((await execa("git", ["diff", "--no-color", `${baseSha}..${headSha}`], { cwd: repo })).stdout)
+    const messages: string[] = []
+    await withWorktree(repo, baseSha, (wt) =>
+      runSplit({
+        pr: {
+          owner: "x", repo: "y", number: 42, title: "t",
+          baseBranch: "main", baseSha, headSha,
+          url: "https://github.com/x/y/pull/42",
+        },
+        diff, config: DEFAULT_CONFIG,
+        classifier: fakeClassifier(() => ({ layer: "A" })),
+        repoPath: repo, worktreePath: wt.path,
+        push: async () => {},
+        openPR: async () => "https://github.com/x/y/pull/43",
+        postComment: async () => {},
+        now: new Date("2026-05-17T14:32:00Z"),
+        onProgress: (m) => messages.push(m),
+      }),
+    )
+    expect(messages.some((m) => /^parsed \d+ files?, \d+ hunks?$/.test(m))).toBe(true)
+    expect(messages).toContain("classifying 2 hunks in 1 batches")
+    expect(messages.some((m) => /^applying layer A/.test(m))).toBe(true)
+    expect(messages).toContain("verifying integrity")
+    expect(messages).toContain("writing manifest")
+    expect(messages.some((m) => /^pushing branch /.test(m))).toBe(true)
+    expect(messages).toContain("opening companion PR")
+  })
+
   it("rejects PRs whose diff exceeds max_diff_tokens", async () => {
     const diff = String((await execa("git", ["diff", "--no-color", `${baseSha}..${headSha}`], { cwd: repo })).stdout)
     await withWorktree(repo, baseSha, async (wt) => {

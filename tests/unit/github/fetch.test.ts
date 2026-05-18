@@ -40,4 +40,23 @@ describe("fetchPRFromCommands", () => {
     expect(runGh).toHaveBeenCalled()
     expect(runGitDiff).toHaveBeenCalledWith("abc123", "def456")
   })
+
+  it("emits a progress line before fetching", async () => {
+    const ghJson = JSON.stringify({
+      number: 7,
+      title: "T",
+      html_url: "https://github.com/o/r/pull/7",
+      base: { ref: "main", sha: "a" },
+      head: { ref: "f", sha: "b" },
+    })
+    const runGh = vi.fn().mockResolvedValue(ghJson)
+    const runGitDiff = vi.fn().mockResolvedValue("")
+    const messages: string[] = []
+    await fetchPRFromCommands({
+      ref: { owner: "o", repo: "r", number: 7 },
+      runGh, runGitDiff,
+      onProgress: (m) => messages.push(m),
+    })
+    expect(messages).toEqual(["fetching PR #7 from o/r"])
+  })
 })

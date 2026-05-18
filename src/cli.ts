@@ -54,6 +54,9 @@ export function buildCli(): Command {
 
 async function doSplit(prArg: string, opts: Record<string, unknown>) {
   const repoPath = process.cwd()
+  const log = opts.json
+    ? () => {}
+    : (m: string) => process.stderr.write(`vibereview: ${m}\n`)
   const config = loadConfig((opts.config as string) ?? join(repoPath, ".vibereview.yml"))
   if (!existsSync(join(repoPath, ".vibereview.yml"))) {
     console.warn("warning: no .vibereview.yml found; using built-in defaults")
@@ -63,7 +66,7 @@ async function doSplit(prArg: string, opts: Record<string, unknown>) {
   const classifier = makeClassifier({ provider: provider!, model: opts.model as string | undefined, config, env: process.env })
   const defaultRepo = await originRepo(repoPath)
   const ref = parsePrUrl(prArg, defaultRepo)
-  const { pr, diff } = await fetchPR(ref, repoPath)
+  const { pr, diff } = await fetchPR(ref, repoPath, log)
 
   if (opts.dryRun) {
     const m = await runManifest({ pr, diff, config, classifier })
@@ -85,6 +88,7 @@ async function doSplit(prArg: string, opts: Record<string, unknown>) {
         if (opts.pr === false) return
         await postOrUpdateComment({ sourcePR: pr, body }, repoPath)
       },
+      onProgress: log,
     })
     if (opts.json) process.stdout.write(JSON.stringify(result, null, 2) + "\n")
     else console.log(`vibereview: opened ${result.companionUrl}\nLayers: A=${result.perLayer.A} B=${result.perLayer.B} C=${result.perLayer.C}`)

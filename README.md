@@ -25,7 +25,8 @@ cd path/to/your/repo
 vibereview split https://github.com/owner/repo/pull/1234
 ```
 
-Override the model:
+Default model: `claude-haiku-4-5` (cheap, sufficient for diff classification).
+Override to a stronger model if needed:
 
 ```bash
 vibereview split https://github.com/owner/repo/pull/1234 \
@@ -40,7 +41,8 @@ cd path/to/your/repo
 vibereview split https://github.com/owner/repo/pull/1234
 ```
 
-Override the model:
+Default model: `gpt-5-mini` (cheap, sufficient for diff classification).
+Override to a stronger model if needed:
 
 ```bash
 vibereview split https://github.com/owner/repo/pull/1234 \

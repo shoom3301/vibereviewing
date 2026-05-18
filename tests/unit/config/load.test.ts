@@ -31,4 +31,9 @@ describe("loadConfig", () => {
   it("default max_diff_tokens is 200000", () => {
     expect(DEFAULT_CONFIG.max_diff_tokens).toBe(200000)
   })
+
+  it("default models are cheap classifiers", () => {
+    expect(DEFAULT_CONFIG.providers.claude.model).toBe("claude-haiku-4-5")
+    expect(DEFAULT_CONFIG.providers.openai.model).toBe("gpt-5-mini")
+  })
 })

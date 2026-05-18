@@ -21,9 +21,11 @@ export type FetchPRFromCommandsArgs = {
   ref: ParsedPrRef
   runGh: (args: string[]) => Promise<string>
   runGitDiff: (baseSha: string, headSha: string) => Promise<string>
+  onProgress?: (msg: string) => void
 }
 
 export async function fetchPRFromCommands(a: FetchPRFromCommandsArgs): Promise<FetchPRResult> {
+  a.onProgress?.(`fetching PR #${a.ref.number} from ${a.ref.owner}/${a.ref.repo}`)
   const json = await a.runGh([
     "api", `repos/${a.ref.owner}/${a.ref.repo}/pulls/${a.ref.number}`,
   ])
@@ -46,7 +48,11 @@ export async function fetchPRFromCommands(a: FetchPRFromCommandsArgs): Promise<F
   }
 }
 
-export async function fetchPR(ref: ParsedPrRef, repoPath: string): Promise<FetchPRResult> {
+export async function fetchPR(
+  ref: ParsedPrRef,
+  repoPath: string,
+  onProgress?: (msg: string) => void,
+): Promise<FetchPRResult> {
   return fetchPRFromCommands({
     ref,
     runGh: async (args) => (await execa("gh", args, { cwd: repoPath })).stdout,
@@ -54,5 +60,6 @@ export async function fetchPR(ref: ParsedPrRef, repoPath: string): Promise<Fetch
       await execa("git", ["fetch", "origin", base, head], { cwd: repoPath, reject: false })
       return (await execa("git", ["diff", "--no-color", `${base}..${head}`], { cwd: repoPath })).stdout
     },
+    onProgress,
   })
 }

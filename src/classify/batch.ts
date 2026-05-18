@@ -35,6 +35,7 @@ export type ClassifyAllArgs = {
   systemPrompt: string
   maxPerBatch: number
   maxTokensPerBatch: number
+  onProgress?: (msg: string) => void
 }
 
 export async function classifyAll(args: ClassifyAllArgs): Promise<ClassifyResponse> {
@@ -46,7 +47,10 @@ export async function classifyAll(args: ClassifyAllArgs): Promise<ClassifyRespon
   const all: Classification[] = []
   const usage: Usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 }
 
-  for (const batch of batches) {
+  args.onProgress?.(`classifying ${args.hunks.length} hunks in ${batches.length} batches`)
+
+  for (let i = 0; i < batches.length; i++) {
+    const batch = batches[i]!
     let result = await args.classifier.classify({
       systemPrompt: args.systemPrompt, hunks: batch,
     })
@@ -70,6 +74,7 @@ export async function classifyAll(args: ClassifyAllArgs): Promise<ClassifyRespon
       }
     }
     all.push(...result.classifications)
+    args.onProgress?.(`  batch ${i + 1}/${batches.length} classified (${batch.length} hunks)`)
   }
 
   return { classifications: all, usage }
