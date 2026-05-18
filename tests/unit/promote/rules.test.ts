@@ -52,3 +52,30 @@ describe("lowConfidenceRule", () => {
     expect(r.get("h_1")!.layer).toBe("A")
   })
 })
+
+describe("crossReferenceRule", () => {
+  it("escalates to B when a string literal also appears in a json file", () => {
+    const ts = makeHunk("src/api.ts",
+      `@@\n-const KEY = "FOO_FLAG"\n+const KEY = "BAR_FLAG"`, "h_ts")
+    const json = makeHunk("flags.json", `@@\n   "FOO_FLAG": true,`, "h_json")
+    const ctx = makeContext(
+      [makeFile("src/api.ts", [ts]), makeFile("flags.json", [json])],
+      [
+        makeClassification({ hunk_id: "h_ts", layer: "A", intents: ["rename_internal"] }),
+        makeClassification({ hunk_id: "h_json", layer: "A", intents: ["config_trivial"] }),
+      ],
+    )
+    const r = seedResult(ctx); crossReferenceRule(ctx, r)
+    expect(r.get("h_ts")!.layer).toBe("B")
+    expect(r.get("h_ts")!.escalations).toContain("cross_reference")
+  })
+
+  it("does not escalate without a cross-reference", () => {
+    const ts = makeHunk("src/api.ts",
+      `@@\n-const KEY = "FOO_FLAG"\n+const KEY = "BAR_FLAG"`, "h_ts")
+    const ctx = makeContext([makeFile("src/api.ts", [ts])],
+      [makeClassification({ hunk_id: "h_ts", layer: "A", intents: ["rename_internal"] })])
+    const r = seedResult(ctx); crossReferenceRule(ctx, r)
+    expect(r.get("h_ts")!.layer).toBe("A")
+  })
+})
