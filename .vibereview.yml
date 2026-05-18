@@ -1,0 +1,44 @@
+version: 1
+
+# Path globs that force a minimum layer floor. Floors only escalate.
+floors:
+  C:
+    - "**/solver/**"
+    - "**/settlement/**"
+    - "**/signing/**"
+    - "**/quote/**"
+    - "**/slippage/**"
+    - "**/allowance/**"
+    - "**/approval/**"
+    - "**/balance/**"
+    - "**/gas/**"
+    - "**/permit/**"
+    - "**/nonce/**"
+    - "**/chain/**"
+    - "**/*.sol"
+    - "**/migrations/**"
+    - ".github/workflows/**"
+    - ".env*"
+  B:
+    - "tsconfig*.json"
+    - ".eslintrc*"
+    - "**/i18n/**"
+
+# Generated files: Layer A only if the source is also in the PR and >= Layer B.
+generated:
+  - "**/*.generated.ts"
+  - "**/__generated__/**"
+  - "**/abi/*.json"
+
+# Hunks below this confidence escalate one layer.
+confidence_threshold: 0.7
+
+# Pre-LLM guard: fail fast if the diff exceeds this many tokens.
+max_diff_tokens: 200000
+
+# LLM provider defaults. Overridable by --provider / --model.
+providers:
+  claude:
+    model: claude-opus-4-7
+  openai:
+    model: gpt-5
