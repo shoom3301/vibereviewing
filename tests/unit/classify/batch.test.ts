@@ -143,4 +143,110 @@ describe("classifyAll", () => {
       maxPerBatch: 10, maxTokensPerBatch: 1e9,
     })).resolves.toBeDefined()
   })
+
+  it("retries on transient network errors and succeeds", async () => {
+    const hunks = [fakeHunk("h_0")]
+    let calls = 0
+    const c: Classifier = {
+      provider: "claude", model: "test", estimateTokens: () => 1,
+      classify: vi.fn(async ({ hunks: input }) => {
+        calls++
+        if (calls < 3) {
+          const err = new Error("Connection error.") as Error & { name: string }
+          err.name = "APIConnectionError"
+          throw err
+        }
+        return {
+          classifications: input.map((h) => ({
+            hunk_id: h.id, layer: "A" as const, confidence: 0.9,
+            intents: ["typo" as const], rationale: "",
+          })),
+          usage: { inputTokens: 1, outputTokens: 1 },
+        }
+      }),
+    }
+    const messages: string[] = []
+    const out = await classifyAll({
+      hunks, classifier: c, systemPrompt: "sys",
+      maxPerBatch: 10, maxTokensPerBatch: 1e9,
+      maxAttemptsPerBatch: 3,
+      retryBackoffMs: () => 0,
+      onProgress: (m) => messages.push(m),
+    })
+    expect(out.classifications).toHaveLength(1)
+    expect(calls).toBe(3)
+    expect(messages.some((m) => /retrying in 0s \(attempt 2\/3\)/.test(m))).toBe(true)
+    expect(messages.some((m) => /retrying in 0s \(attempt 3\/3\)/.test(m))).toBe(true)
+  })
+
+  it("does not retry non-retryable errors (e.g. auth)", async () => {
+    const hunks = [fakeHunk("h_0")]
+    let calls = 0
+    const c: Classifier = {
+      provider: "claude", model: "test", estimateTokens: () => 1,
+      classify: vi.fn(async () => {
+        calls++
+        const err = new Error("Invalid API key") as Error & { name: string; status: number }
+        err.name = "AuthenticationError"
+        err.status = 401
+        throw err
+      }),
+    }
+    await expect(classifyAll({
+      hunks, classifier: c, systemPrompt: "sys",
+      maxPerBatch: 10, maxTokensPerBatch: 1e9,
+      maxAttemptsPerBatch: 3,
+      retryBackoffMs: () => 0,
+    })).rejects.toThrow(/Invalid API key/)
+    expect(calls).toBe(1)
+  })
+
+  it("retries 5xx status errors", async () => {
+    const hunks = [fakeHunk("h_0")]
+    let calls = 0
+    const c: Classifier = {
+      provider: "claude", model: "test", estimateTokens: () => 1,
+      classify: vi.fn(async ({ hunks: input }) => {
+        calls++
+        if (calls === 1) {
+          const err = new Error("Internal server error") as Error & { status: number }
+          err.status = 503
+          throw err
+        }
+        return {
+          classifications: input.map((h) => ({
+            hunk_id: h.id, layer: "A" as const, confidence: 0.9,
+            intents: ["typo" as const], rationale: "",
+          })),
+          usage: { inputTokens: 1, outputTokens: 1 },
+        }
+      }),
+    }
+    const out = await classifyAll({
+      hunks, classifier: c, systemPrompt: "sys",
+      maxPerBatch: 10, maxTokensPerBatch: 1e9,
+      maxAttemptsPerBatch: 3,
+      retryBackoffMs: () => 0,
+    })
+    expect(out.classifications).toHaveLength(1)
+    expect(calls).toBe(2)
+  })
+
+  it("throws enriched error with batch context after exhausting retries", async () => {
+    const hunks = [fakeHunk("h_0"), fakeHunk("h_1")]
+    const c: Classifier = {
+      provider: "claude", model: "test", estimateTokens: () => 1,
+      classify: vi.fn(async () => {
+        const err = new Error("Connection error.") as Error & { name: string }
+        err.name = "APIConnectionError"
+        throw err
+      }),
+    }
+    await expect(classifyAll({
+      hunks, classifier: c, systemPrompt: "sys",
+      maxPerBatch: 10, maxTokensPerBatch: 1e9,
+      maxAttemptsPerBatch: 2,
+      retryBackoffMs: () => 0,
+    })).rejects.toThrow(/batch 1\/1 failed after 2 attempts/)
+  })
 })

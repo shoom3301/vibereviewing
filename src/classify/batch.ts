@@ -1,4 +1,4 @@
-import type { Classifier, ClassifyResponse, Usage } from "./classifier.js"
+import type { Classifier, ClassifyRequest, ClassifyResponse, Usage } from "./classifier.js"
 import type { Hunk } from "../hunkify/types.js"
 import type { Classification } from "../promote/types.js"
 
@@ -36,6 +36,15 @@ export type ClassifyAllArgs = {
   maxPerBatch: number
   maxTokensPerBatch: number
   onProgress?: (msg: string) => void
+  maxAttemptsPerBatch?: number
+  retryBackoffMs?: (attempt: number) => number
+}
+
+const DEFAULT_MAX_ATTEMPTS = 3
+const DEFAULT_BACKOFF = (attempt: number): number => {
+  const base = 1000 * Math.pow(2, attempt)  // 2s, 4s, 8s, ...
+  const jitter = Math.floor(Math.random() * base * 0.3)
+  return base + jitter
 }
 
 export async function classifyAll(args: ClassifyAllArgs): Promise<ClassifyResponse> {
@@ -49,19 +58,22 @@ export async function classifyAll(args: ClassifyAllArgs): Promise<ClassifyRespon
 
   args.onProgress?.(`classifying ${args.hunks.length} hunks in ${batches.length} batches`)
 
+  const maxAttempts = args.maxAttemptsPerBatch ?? DEFAULT_MAX_ATTEMPTS
+  const backoff = args.retryBackoffMs ?? DEFAULT_BACKOFF
+
   for (let i = 0; i < batches.length; i++) {
     const batch = batches[i]!
-    let result = await args.classifier.classify({
+    let result = await attemptClassify(args.classifier, {
       systemPrompt: args.systemPrompt, hunks: batch,
-    })
+    }, { batchIndex: i, totalBatches: batches.length, maxAttempts, backoff, onProgress: args.onProgress })
     accUsage(usage, result.usage)
 
     let missing = findMissing(batch, result.classifications)
     if (missing.length > 0) {
-      const retry = await args.classifier.classify({
+      const retry = await attemptClassify(args.classifier, {
         systemPrompt: args.systemPrompt + "\n\nRETRY: missing ids — " + missing.join(","),
         hunks: batch,
-      })
+      }, { batchIndex: i, totalBatches: batches.length, maxAttempts, backoff, onProgress: args.onProgress })
       accUsage(usage, retry.usage)
       const retryForMissing = retry.classifications.filter((c) => missing.includes(c.hunk_id))
       result = {
@@ -80,6 +92,69 @@ export async function classifyAll(args: ClassifyAllArgs): Promise<ClassifyRespon
   }
 
   return { classifications: all, usage }
+}
+
+type AttemptContext = {
+  batchIndex: number
+  totalBatches: number
+  maxAttempts: number
+  backoff: (attempt: number) => number
+  onProgress?: (msg: string) => void
+}
+
+async function attemptClassify(
+  classifier: Classifier,
+  req: ClassifyRequest,
+  ctx: AttemptContext,
+): Promise<ClassifyResponse> {
+  for (let attempt = 1; attempt <= ctx.maxAttempts; attempt++) {
+    try {
+      return await classifier.classify(req)
+    } catch (err) {
+      const isLast = attempt === ctx.maxAttempts
+      if (isLast || !isRetryableError(err)) {
+        const original = err instanceof Error ? err.message : String(err)
+        throw new Error(
+          `batch ${ctx.batchIndex + 1}/${ctx.totalBatches} failed after ${attempt} attempts: ${original}`,
+          { cause: err },
+        )
+      }
+      const waitMs = ctx.backoff(attempt)
+      ctx.onProgress?.(
+        `  batch ${ctx.batchIndex + 1}/${ctx.totalBatches} ${describeError(err)} — retrying in ${Math.round(waitMs / 1000)}s (attempt ${attempt + 1}/${ctx.maxAttempts})`,
+      )
+      if (waitMs > 0) await new Promise((r) => setTimeout(r, waitMs))
+    }
+  }
+  throw new Error("unreachable")
+}
+
+const RETRYABLE_NAMES = new Set([
+  "APIConnectionError",
+  "APIConnectionTimeoutError",
+  "InternalServerError",
+  "RateLimitError",
+  "OverloadedError",
+])
+
+function isRetryableError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false
+  const e = err as { name?: string; status?: number; code?: string }
+  if (e.name && RETRYABLE_NAMES.has(e.name)) return true
+  if (typeof e.status === "number") {
+    if (e.status === 408 || e.status === 429 || e.status === 529) return true
+    if (e.status >= 500 && e.status < 600) return true
+  }
+  if (e.code === "ECONNRESET" || e.code === "ECONNREFUSED" || e.code === "ETIMEDOUT") return true
+  return false
+}
+
+function describeError(err: unknown): string {
+  if (!err || typeof err !== "object") return "error"
+  const e = err as { name?: string; message?: string; status?: number }
+  if (e.status) return `${e.name ?? "error"} (HTTP ${e.status})`
+  if (e.name === "APIConnectionError" || e.name === "APIConnectionTimeoutError") return "connection error"
+  return e.name ?? "error"
 }
 
 function formatBatchUsage(u: Usage): string {
