@@ -137,24 +137,40 @@ const RETRYABLE_NAMES = new Set([
   "OverloadedError",
 ])
 
+function errorClassName(err: unknown): string | undefined {
+  if (!err || typeof err !== "object") return undefined
+  // The Anthropic and OpenAI SDKs subclass Error but don't set `this.name`,
+  // so `err.name` is the default `"Error"`. Identify by constructor name
+  // (set by `class X extends Error` declaration) and fall back to `.name`.
+  const proto = Object.getPrototypeOf(err) as { constructor?: { name?: string } } | null
+  const ctor = proto?.constructor?.name
+  if (ctor && ctor !== "Error") return ctor
+  const named = (err as { name?: string }).name
+  return named && named !== "Error" ? named : undefined
+}
+
 function isRetryableError(err: unknown): boolean {
   if (!err || typeof err !== "object") return false
-  const e = err as { name?: string; status?: number; code?: string }
-  if (e.name && RETRYABLE_NAMES.has(e.name)) return true
+  const cls = errorClassName(err)
+  if (cls && RETRYABLE_NAMES.has(cls)) return true
+  const e = err as { status?: number; code?: string; cause?: unknown }
   if (typeof e.status === "number") {
     if (e.status === 408 || e.status === 429 || e.status === 529) return true
     if (e.status >= 500 && e.status < 600) return true
   }
   if (e.code === "ECONNRESET" || e.code === "ECONNREFUSED" || e.code === "ETIMEDOUT") return true
+  // Undici/fetch wraps low-level failures via `cause` — peek through one layer.
+  if (e.cause && e.cause !== err) return isRetryableError(e.cause)
   return false
 }
 
 function describeError(err: unknown): string {
   if (!err || typeof err !== "object") return "error"
-  const e = err as { name?: string; message?: string; status?: number }
-  if (e.status) return `${e.name ?? "error"} (HTTP ${e.status})`
-  if (e.name === "APIConnectionError" || e.name === "APIConnectionTimeoutError") return "connection error"
-  return e.name ?? "error"
+  const cls = errorClassName(err)
+  const status = (err as { status?: number }).status
+  if (status) return `${cls ?? "error"} (HTTP ${status})`
+  if (cls === "APIConnectionError" || cls === "APIConnectionTimeoutError") return "connection error"
+  return cls ?? "error"
 }
 
 function formatBatchUsage(u: Usage): string {

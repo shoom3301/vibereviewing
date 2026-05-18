@@ -232,6 +232,39 @@ describe("classifyAll", () => {
     expect(calls).toBe(2)
   })
 
+  it("retries when SDK throws a real APIConnectionError subclass (name unset)", async () => {
+    // Mirror the actual @anthropic-ai/sdk and openai SDKs: subclass of Error
+    // with no `this.name = ...` — JS leaves `.name === "Error"`, so we must
+    // identify the error by constructor.name instead.
+    class APIConnectionError extends Error {
+      constructor(message: string) { super(message) }
+    }
+    const hunks = [fakeHunk("h_0")]
+    let calls = 0
+    const c: Classifier = {
+      provider: "claude", model: "test", estimateTokens: () => 1,
+      classify: vi.fn(async ({ hunks: input }) => {
+        calls++
+        if (calls === 1) throw new APIConnectionError("Connection error.")
+        return {
+          classifications: input.map((h) => ({
+            hunk_id: h.id, layer: "A" as const, confidence: 0.9,
+            intents: ["typo" as const], rationale: "",
+          })),
+          usage: { inputTokens: 1, outputTokens: 1 },
+        }
+      }),
+    }
+    const out = await classifyAll({
+      hunks, classifier: c, systemPrompt: "sys",
+      maxPerBatch: 10, maxTokensPerBatch: 1e9,
+      maxAttemptsPerBatch: 3,
+      retryBackoffMs: () => 0,
+    })
+    expect(out.classifications).toHaveLength(1)
+    expect(calls).toBe(2)
+  })
+
   it("throws enriched error with batch context after exhausting retries", async () => {
     const hunks = [fakeHunk("h_0"), fakeHunk("h_1")]
     const c: Classifier = {
