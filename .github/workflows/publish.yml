@@ -19,9 +19,11 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
-          registry-url: https://registry.npmjs.org
+
+      - name: Upgrade npm to a version with OIDC support
+        run: npm install -g npm@latest
 
       - run: pnpm install --frozen-lockfile
 
@@ -40,6 +42,5 @@ jobs:
             exit 1
           fi
 
-      - run: pnpm publish --no-git-checks --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Publish via npm OIDC (Trusted Publisher)
+        run: npm publish --access public --provenance
