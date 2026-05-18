@@ -1,12 +1,12 @@
 {
-  "name": "vibereview",
+  "name": "vibereviewing",
   "version": "0.1.0",
   "description": "Split a GitHub PR into AI-reviewable layers",
   "license": "MIT",
   "author": "shoom3301 <shoom3301@gmail.com>",
   "type": "module",
   "bin": {
-    "vibereview": "./dist/cli.js"
+    "vibereviewing": "./dist/cli.js"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -16,8 +16,7 @@
     "README.md"
   ],
   "publishConfig": {
-    "access": "public",
-    "provenance": true
+    "access": "public"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
