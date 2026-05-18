@@ -79,3 +79,36 @@ describe("crossReferenceRule", () => {
     expect(r.get("h_ts")!.layer).toBe("A")
   })
 })
+
+describe("dependencyRule", () => {
+  it("escalates to C on a major version bump", () => {
+    const h = makeHunk("package.json",
+      `@@\n   "dependencies": {\n-    "react": "^17.0.2",\n+    "react": "^18.0.0",\n   },`,
+      "h_pkg")
+    const ctx = makeContext([makeFile("package.json", [h])],
+      [makeClassification({ hunk_id: "h_pkg", layer: "B", intents: ["dep_major"] })])
+    const r = seedResult(ctx); dependencyRule(ctx, r)
+    expect(r.get("h_pkg")!.layer).toBe("C")
+    expect(r.get("h_pkg")!.escalations).toContain("dependency")
+  })
+
+  it("escalates to C on any runtime dep edit", () => {
+    const h = makeHunk("package.json",
+      `@@\n   "dependencies": {\n-    "lodash": "4.17.20",\n+    "lodash": "4.17.21",\n   },`,
+      "h_pkg")
+    const ctx = makeContext([makeFile("package.json", [h])],
+      [makeClassification({ hunk_id: "h_pkg", layer: "A", intents: ["dep_runtime"] })])
+    const r = seedResult(ctx); dependencyRule(ctx, r)
+    expect(r.get("h_pkg")!.layer).toBe("C")
+  })
+
+  it("does not escalate a devDependencies patch bump", () => {
+    const h = makeHunk("package.json",
+      `@@\n   "devDependencies": {\n-    "vitest": "2.0.0",\n+    "vitest": "2.0.1",\n   },`,
+      "h_pkg")
+    const ctx = makeContext([makeFile("package.json", [h])],
+      [makeClassification({ hunk_id: "h_pkg", layer: "A", intents: ["dep_dev_patch"] })])
+    const r = seedResult(ctx); dependencyRule(ctx, r)
+    expect(r.get("h_pkg")!.layer).toBe("A")
+  })
+})
