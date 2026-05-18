@@ -6,7 +6,7 @@ needs human judgment.
 ## Install
 
 ```bash
-pnpm add -g vibereview
+pnpm add -g vibereviewing
 ```
 
 Requires Node 20+, `git`, and `gh` CLI (authenticated).
