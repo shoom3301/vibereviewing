@@ -13,10 +13,53 @@ Requires Node 20+, `git`, and `gh` CLI (authenticated).
 
 ## Quick start
 
+vibereview runs against a local checkout of the **target repo** (the one the PR
+lives in), not the directory where vibereview itself is installed. `cd` there
+first.
+
+### Using Claude (Anthropic)
+
 ```bash
-export ANTHROPIC_API_KEY=sk-...
+export ANTHROPIC_API_KEY=sk-ant-...
 cd path/to/your/repo
 vibereview split https://github.com/owner/repo/pull/1234
+```
+
+Override the model:
+
+```bash
+vibereview split https://github.com/owner/repo/pull/1234 \
+  --provider claude --model claude-opus-4-7
+```
+
+### Using OpenAI
+
+```bash
+export OPENAI_API_KEY=sk-...
+cd path/to/your/repo
+vibereview split https://github.com/owner/repo/pull/1234
+```
+
+Override the model:
+
+```bash
+vibereview split https://github.com/owner/repo/pull/1234 \
+  --provider openai --model gpt-5
+```
+
+### Provider auto-detection
+
+If both `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` are set, Claude wins. Pass
+`--provider openai` (or `--provider claude`) to force a choice.
+
+### Dry run (no PR, no push)
+
+Inspect the classification manifest without touching git or GitHub:
+
+```bash
+vibereview split https://github.com/owner/repo/pull/1234 --dry-run
+# or, equivalently:
+vibereview manifest https://github.com/owner/repo/pull/1234
 ```
 
 ## Commands
