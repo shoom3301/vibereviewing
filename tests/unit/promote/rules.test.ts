@@ -143,3 +143,28 @@ describe("exportedSymbolRule", () => {
     expect(r.get("h_def")!.layer).toBe("A")
   })
 })
+
+describe("generatedFileRule", () => {
+  it("escalates a generated file with no source-of-generation to C", () => {
+    const g = makeHunk("src/api.generated.ts", "@@", "h_gen", { isGenerated: true })
+    const ctx = makeContext([makeFile("src/api.generated.ts", [g])],
+      [makeClassification({ hunk_id: "h_gen", layer: "A", intents: ["generated_output"] })])
+    const r = seedResult(ctx); generatedFileRule(ctx, r)
+    expect(r.get("h_gen")!.layer).toBe("C")
+    expect(r.get("h_gen")!.escalations).toContain("generated_missing_source")
+  })
+
+  it("leaves a generated file alone when a paired source is present at ≥ B", () => {
+    const g = makeHunk("src/api.generated.ts", "@@", "h_gen", { isGenerated: true })
+    const src = makeHunk("src/api.graphql", "@@", "h_src")
+    const ctx = makeContext(
+      [makeFile("src/api.generated.ts", [g]), makeFile("src/api.graphql", [src])],
+      [
+        makeClassification({ hunk_id: "h_gen", layer: "A", intents: ["generated_output"] }),
+        makeClassification({ hunk_id: "h_src", layer: "B", intents: ["api_contract"] }),
+      ],
+    )
+    const r = seedResult(ctx); generatedFileRule(ctx, r)
+    expect(r.get("h_gen")!.layer).toBe("A")
+  })
+})

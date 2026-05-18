@@ -1,4 +1,5 @@
 import type { Rule, PromoteContext } from "./types.js"
+import type { Layer } from "../types.js"
 import { escalateOne, maxLayer } from "./layers.js"
 
 export const multiIntentRule: Rule = (ctx, current) => {
@@ -149,5 +150,43 @@ function hunkMentions(body: string, symbol: string): boolean {
   return false
 }
 
-export const generatedFileRule: Rule = () => {}
+const LR: Record<Layer, number> = { A: 0, B: 1, C: 2 }
+
+export const generatedFileRule: Rule = (ctx, current) => {
+  const fileMaxLayer = new Map<string, Layer>()
+  for (const h of ctx.hunks) {
+    const cur = current.get(h.id)!.layer
+    const prev = fileMaxLayer.get(h.file)
+    fileMaxLayer.set(h.file, prev === undefined ? cur : (LR[cur] > LR[prev] ? cur : prev))
+  }
+  for (const h of ctx.hunks) {
+    if (!h.context.isGenerated) continue
+    if (hasPairedSource(h, ctx, fileMaxLayer)) continue
+    const c = current.get(h.id)!
+    const before = c.layer
+    c.layer = "C"
+    if (c.layer !== before) c.escalations.push("generated_missing_source")
+  }
+}
+
+function hasPairedSource(
+  gen: { file: string },
+  ctx: PromoteContext,
+  layers: Map<string, Layer>,
+): boolean {
+  const stem = gen.file
+    .replace(/\.generated\.[^./]+$/, "")
+    .replace(/__generated__\//, "")
+  const stemBase = stem.split("/").pop() ?? ""
+  for (const f of ctx.files) {
+    if (f.file === gen.file) continue
+    if (f.hunks.every((h) => h.context.isGenerated)) continue
+    if (f.file.includes(stem) || (stemBase.length > 1 && f.file.endsWith(stemBase))) {
+      const lyr = layers.get(f.file)
+      if (lyr && LR[lyr] >= LR["B"]) return true
+    }
+  }
+  return false
+}
+
 export const domainFloorRule: Rule = () => {}
